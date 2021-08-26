@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package your.service.v1;
+option go_package = "github.com/denkoren/mi-labs-test/v1";
+
+import "google/api/annotations.proto";
+
+service ZapuskatorAPI {
+  rpc Calculate(Calculate.Request) returns (Calculate.Response) {
+    option (google.api.http) = {
+      get: "/v1/calculate/{seed}/{input}"
+    };
+  }
+}
+
+message Calculate {
+  message Request {
+    string seed = 1;
+    string input = 2;
+  }
+
+  message Response {
+    bytes data = 1;
+  }
+}
