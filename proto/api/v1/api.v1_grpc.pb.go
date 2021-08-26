@@ -19,6 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ZapuskatorAPIClient interface {
 	Calculate(ctx context.Context, in *Calculate_Request, opts ...grpc.CallOption) (*Calculate_Response, error)
+	GetContainerInfo(ctx context.Context, in *Container_Request, opts ...grpc.CallOption) (*Container_Response, error)
 }
 
 type zapuskatorAPIClient struct {
@@ -31,7 +32,16 @@ func NewZapuskatorAPIClient(cc grpc.ClientConnInterface) ZapuskatorAPIClient {
 
 func (c *zapuskatorAPIClient) Calculate(ctx context.Context, in *Calculate_Request, opts ...grpc.CallOption) (*Calculate_Response, error) {
 	out := new(Calculate_Response)
-	err := c.cc.Invoke(ctx, "/your.service.v1.ZapuskatorAPI/Calculate", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/Zapuskator.API.v1.ZapuskatorAPI/Calculate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *zapuskatorAPIClient) GetContainerInfo(ctx context.Context, in *Container_Request, opts ...grpc.CallOption) (*Container_Response, error) {
+	out := new(Container_Response)
+	err := c.cc.Invoke(ctx, "/Zapuskator.API.v1.ZapuskatorAPI/GetContainerInfo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +53,7 @@ func (c *zapuskatorAPIClient) Calculate(ctx context.Context, in *Calculate_Reque
 // for forward compatibility
 type ZapuskatorAPIServer interface {
 	Calculate(context.Context, *Calculate_Request) (*Calculate_Response, error)
+	GetContainerInfo(context.Context, *Container_Request) (*Container_Response, error)
 	mustEmbedUnimplementedZapuskatorAPIServer()
 }
 
@@ -52,6 +63,9 @@ type UnimplementedZapuskatorAPIServer struct {
 
 func (UnimplementedZapuskatorAPIServer) Calculate(context.Context, *Calculate_Request) (*Calculate_Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Calculate not implemented")
+}
+func (UnimplementedZapuskatorAPIServer) GetContainerInfo(context.Context, *Container_Request) (*Container_Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetContainerInfo not implemented")
 }
 func (UnimplementedZapuskatorAPIServer) mustEmbedUnimplementedZapuskatorAPIServer() {}
 
@@ -76,10 +90,28 @@ func _ZapuskatorAPI_Calculate_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/your.service.v1.ZapuskatorAPI/Calculate",
+		FullMethod: "/Zapuskator.API.v1.ZapuskatorAPI/Calculate",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ZapuskatorAPIServer).Calculate(ctx, req.(*Calculate_Request))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ZapuskatorAPI_GetContainerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Container_Request)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ZapuskatorAPIServer).GetContainerInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Zapuskator.API.v1.ZapuskatorAPI/GetContainerInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ZapuskatorAPIServer).GetContainerInfo(ctx, req.(*Container_Request))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -88,12 +120,16 @@ func _ZapuskatorAPI_Calculate_Handler(srv interface{}, ctx context.Context, dec 
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ZapuskatorAPI_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "your.service.v1.ZapuskatorAPI",
+	ServiceName: "Zapuskator.API.v1.ZapuskatorAPI",
 	HandlerType: (*ZapuskatorAPIServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Calculate",
 			Handler:    _ZapuskatorAPI_Calculate_Handler,
+		},
+		{
+			MethodName: "GetContainerInfo",
+			Handler:    _ZapuskatorAPI_GetContainerInfo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/denkoren/mi-labs-test/internal/services/api"
-	apipb "github.com/denkoren/mi-labs-test/proto/v1"
+	apipb "github.com/denkoren/mi-labs-test/proto/api/v1"
 )
 
 var (

@@ -1,0 +1,172 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "api.v1.proto",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/calculate/{params.seed}/{params.input}": {
+      "get": {
+        "operationId": "ZapuskatorAPI_Calculate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CalculateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "params.seed",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "params.input",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ZapuskatorAPI"
+        ]
+      }
+    },
+    "/v1/container/{id}": {
+      "get": {
+        "operationId": "ZapuskatorAPI_GetContainerInfo",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ContainerResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/runtimeError"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ZapuskatorAPI"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "ContainerInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "addr": {
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ContainerParams"
+        },
+        "status": {
+          "$ref": "#/definitions/ContainerStatus"
+        }
+      }
+    },
+    "ContainerParams": {
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        }
+      }
+    },
+    "ContainerStatus": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "PENDING",
+        "READY",
+        "RUNNING",
+        "STOPPING"
+      ],
+      "default": "UNKNOWN"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "type_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "runtimeError": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1CalculateResponse": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "v1ContainerResponse": {
+      "type": "object",
+      "properties": {
+        "info": {
+          "$ref": "#/definitions/ContainerInfo"
+        }
+      }
+    }
+  }
+}
