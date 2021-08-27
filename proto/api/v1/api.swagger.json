@@ -110,13 +110,13 @@
     "ContainerStatus": {
       "type": "string",
       "enum": [
-        "UNKNOWN",
-        "PENDING",
+        "NEW",
+        "STARTING",
         "READY",
         "RUNNING",
         "STOPPING"
       ],
-      "default": "UNKNOWN"
+      "default": "NEW"
     },
     "protobufAny": {
       "type": "object",

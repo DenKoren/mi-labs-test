@@ -31,8 +31,8 @@ message Calculate {
 
 message Container {
   enum Status {
-    UNKNOWN = 0;
-    PENDING = 1;
+    NEW = 0;
+    STARTING = 1;
     READY = 2;
     RUNNING = 3;
     STOPPING = 4;

@@ -3,8 +3,8 @@ package docker
 import (
 	"log"
 
+	"github.com/denkoren/mi-labs-test/internal/core"
 	"github.com/denkoren/mi-labs-test/internal/util"
-	apipb "github.com/denkoren/mi-labs-test/proto/v1"
 )
 
 type ContainerManager struct {
@@ -14,14 +14,22 @@ func NewContainerManager() (*ContainerManager, error) {
 	return &ContainerManager{}, nil
 }
 
-func (*ContainerManager) StartContainer(params *apipb.Container_Params) (string, error) {
+func (*ContainerManager) StartContainer(params core.ContainerParams) (core.ContainerInfo, error) {
 	log.Printf("Starting container: seed: %s, input: %s", params.Seed, params.Input)
-	return util.RandString(10), nil
+	c := core.NewContainerInfo(
+		util.RandString(10),
+		"some.example.addr:8888",
+		params,
+	)
+	c.Status = core.ContainerStatusStarting
+
+	return c, nil
 }
 
-func (*ContainerManager) GetContainerInfo(id string) (*apipb.Container_Info, error) {
-	return &apipb.Container_Info{
-		Id: id,
+func (*ContainerManager) GetContainerInfo(id string) (core.ContainerInfo, error) {
+	return core.ContainerInfo{
+		ID: id,
+		// ...
 	}, nil
 }
 
