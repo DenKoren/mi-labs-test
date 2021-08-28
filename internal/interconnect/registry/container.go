@@ -22,9 +22,6 @@ func (c *ContainerInfo) UpdateLastUsed() {
 }
 
 func (c *ContainerInfo) Save() error {
-	c.registry.available.set(c)
-	c.registry.paramsIndex.set(c)
-
 	// Perform DB update actions here
 	return nil
 }
@@ -88,12 +85,12 @@ func (c *ContainerInfo) ToStopping(hooks ...TransitionHook) error {
 	return c.transition(core.ContainerStatusStopping, hooks...)
 }
 
-func (c *ContainerInfo) ToStopped() error {
-	return c.transition(core.ContainerStatusStopped)
+func (c *ContainerInfo) ToStopped(hooks ...TransitionHook) error {
+	return c.transition(core.ContainerStatusStopped, hooks...)
 }
 
-func (c *ContainerInfo) ToFailed() error {
-	return c.transition(core.ContainerStatusFailed)
+func (c *ContainerInfo) ToFailed(hooks ...TransitionHook) error {
+	return c.transition(core.ContainerStatusFailed, hooks...)
 }
 
 func simpleHook(f func(ns core.ContainerStatus)) TransitionHook {

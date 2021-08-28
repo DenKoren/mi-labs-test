@@ -14,7 +14,13 @@ type inputIndex map[string]*ContainerInfo
 type paramsIndex map[string]inputIndex
 
 func (s paramsIndex) set(c *ContainerInfo) {
-	s[c.Params.Seed][c.Params.Input] = c
+	iIndex, exists := s[c.Params.Seed]
+	if !exists {
+		iIndex = make(inputIndex, defaultContainerRegistryCapacity)
+		s[c.Params.Seed] = iIndex
+	}
+
+	iIndex[c.Params.Input] = c
 }
 
 func (s paramsIndex) del(c *ContainerInfo) {

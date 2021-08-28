@@ -86,7 +86,7 @@ func (s *Server) startContainer(ctx context.Context, c *registry.ContainerInfo) 
 }
 
 func (s *Server) startContainerHook(ctx context.Context, c *registry.ContainerInfo) error {
-	log.Printf("Container status is '%s', starting new container", c.Status.String())
+	log.Printf("Container status is '%s', starting new docker container", c.Status.String())
 	cc, err := s.docker.StartContainer(ctx, c.ContainerInfo.Params)
 	if err != nil {
 		return fmt.Errorf("failed to start new container: %w", err)
@@ -94,6 +94,11 @@ func (s *Server) startContainerHook(ctx context.Context, c *registry.ContainerIn
 
 	c.ID = cc.ID
 	c.Addr = cc.Addr
+
+	err = s.registry.Register(c)
+	if err != nil {
+		return fmt.Errorf("failed to register new container '%s': %w", c.ID, err)
+	}
 
 	log.Printf("Container '%s' was scheduled", c.ID)
 	return nil

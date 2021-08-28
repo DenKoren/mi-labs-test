@@ -2,10 +2,13 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/denkoren/mi-labs-test/internal/core"
 )
+
+const defaultContainerRegistryCapacity = 10
 
 var ErrContainerNotExists = errors.New("container does not exist")
 
@@ -13,41 +16,38 @@ type ContainerRegistry struct {
 	available   idIndex
 	paramsIndex paramsIndex
 	stopping    idIndex
+	failed      idIndex
 
 	registryLock sync.RWMutex
 }
 
 func NewContainerRegistry() (*ContainerRegistry, error) {
 	return &ContainerRegistry{
-		available:   make(idIndex),
-		paramsIndex: make(paramsIndex),
-		stopping:    make(idIndex),
+		available:   make(idIndex, defaultContainerRegistryCapacity),
+		paramsIndex: make(paramsIndex, defaultContainerRegistryCapacity),
+		stopping:    make(idIndex, defaultContainerRegistryCapacity),
+		failed:      make(idIndex, defaultContainerRegistryCapacity),
 	}, nil
 }
 
-//func (r *ContainerRegistry) Register(container *apipb.Container_Info) error {
-//	r.registryLock.Lock()
-//	defer r.registryLock.Unlock()
-//
-//	if c, _ := r.getByID(container.Id); c != nil {
-//		return fmt.Errorf("container with ID '%s' already exist", container.Id)
-//	}
-//
-//	c, err := convertContainerInfo(container, r)
-//	if err != nil {
-//		return err
-//	}
-//
-//	r.available.set(c)
-//	r.paramsIndex.set(c)
-//	return nil
-//}
+func (r *ContainerRegistry) Register(c *ContainerInfo) error {
+	r.registryLock.Lock()
+	defer r.registryLock.Unlock()
+
+	if c, _ := r.getByID(c.ID); c != nil {
+		return fmt.Errorf("container with ID '%s' already exist", c.ID)
+	}
+
+	r.available.set(c)
+	r.paramsIndex.set(c)
+	return nil
+}
 
 // GetByID is thread-safe way to get existing container by its ID
 // The container is returned locked, so you should unlock it when you finish operate with it
 func (r *ContainerRegistry) GetByID(id string) (*ContainerInfo, error) {
 	r.registryLock.RLock()
-	defer r.registryLock.Unlock()
+	defer r.registryLock.RUnlock()
 
 	c, err := r.getByID(id)
 	if err != nil {
@@ -73,7 +73,7 @@ func (r *ContainerRegistry) getByID(id string) (*ContainerInfo, error) {
 // The container is returned locked, so you should unlock it when you finish operate with it
 func (r *ContainerRegistry) GetByParams(params core.ContainerParams) (*ContainerInfo, error) {
 	r.registryLock.RLock()
-	defer r.registryLock.Unlock()
+	defer r.registryLock.RUnlock()
 
 	c, err := r.getByParams(params)
 	if err != nil {
@@ -110,6 +110,10 @@ func (r *ContainerRegistry) ExistingOrNewByParams(params core.ContainerParams) (
 		return c, nil
 	}
 
+	if err != ErrContainerNotExists {
+		return nil, err
+	}
+
 	c = &ContainerInfo{
 		registry: r,
 
@@ -133,23 +137,23 @@ func (r *ContainerRegistry) ToStopping(id string) error {
 		return err
 	}
 
-	err = c.ToStopping()
-	if err != nil {
-		return err
-	}
+	err = c.ToStopping(
+		func(_ core.ContainerStatus) error {
+			r.available.del(id)
+			r.paramsIndex.del(c)
 
-	r.available.del(id)
-	r.paramsIndex.del(c)
-
-	r.stopping.set(c)
-	return nil
+			r.stopping.set(c)
+			return nil
+		},
+	)
+	return err
 }
 
 func (r *ContainerRegistry) ToStopped(id string) (*ContainerInfo, error) {
 	r.registryLock.Lock()
 	defer r.registryLock.Unlock()
 
-	c, err := r.getByID(id)
+	c, _ := r.getByID(id)
 	if c == nil {
 		c = r.stopping[id]
 	}
@@ -157,14 +161,12 @@ func (r *ContainerRegistry) ToStopped(id string) (*ContainerInfo, error) {
 		return nil, ErrContainerNotExists
 	}
 
-	err = c.ToStopped()
-	if err != nil {
-		return c, err
-	}
-
-	r.available.del(id)
-	r.paramsIndex.del(c)
-	r.stopping.del(id)
-
-	return c, nil
+	return c, c.ToStopped(
+		func(_ core.ContainerStatus) error {
+			r.available.del(id)
+			r.paramsIndex.del(c)
+			r.stopping.del(id)
+			return nil
+		},
+	)
 }
