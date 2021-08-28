@@ -6,12 +6,15 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/denkoren/mi-labs-test/internal/interconnect/docker"
+	"github.com/denkoren/mi-labs-test/internal/interconnect/registry"
 	"github.com/denkoren/mi-labs-test/internal/services/api"
 	apipb "github.com/denkoren/mi-labs-test/proto/api/v1"
 )
@@ -25,8 +28,8 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "zapuskator",
 	Short: "Zapuskator",
-	Long: `...`,
-	RunE: runRoot,
+	Long:  `...`,
+	RunE:  runRoot,
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
@@ -34,25 +37,70 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	addr := fmt.Sprintf("localhost:%d", grpcPort)
+	var (
+		err      error
+		grpcAddr string
+		group    *errgroup.Group
 
+		cRegistry *registry.ContainerRegistry
+		cManager  *docker.ContainerManager
+	)
+
+	grpcAddr = fmt.Sprintf("localhost:%d", grpcPort)
+
+	cRegistry, err = initContainerRegistry()
+	cobra.CheckErr(err)
+
+	cManager, err = initDockerInterconnect()
+	cobra.CheckErr(err)
+
+	group = &errgroup.Group{}
+
+	initGrpcAPIServer(ctx, group, grpcAddr, cRegistry, cManager)
+	initRestAPIServer(ctx, group, grpcAddr)
+
+	// FIXME: graceful shutdown by os.signal()
+	return group.Wait()
+}
+
+func init() {
+	rootCmd.PersistentFlags().IntVar(&grpcPort, "grpc-port", 4334, "Port to be listened by Zapuskator gRPC service")
+	rootCmd.PersistentFlags().IntVar(&httpPort, "http-port", 4224, "Port to be listened by Zapuskator HTTP service")
+}
+
+func initContainerRegistry() (*registry.ContainerRegistry, error) {
+	return registry.NewContainerRegistry()
+}
+
+func initDockerInterconnect() (*docker.ContainerManager, error) {
+	return docker.NewContainerManager()
+}
+
+func initGrpcAPIServer(_ context.Context, group *errgroup.Group, addr string, r *registry.ContainerRegistry, d *docker.ContainerManager) {
 	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
+	cobra.CheckErr(err)
 
 	grpcServer := grpc.NewServer(
-		//grpc.StreamInterceptor(...),
+	//grpc.StreamInterceptor(...),
 	)
-	apipb.RegisterZapuskatorAPIServer(grpcServer, &api.Server{})
+	srv, err := api.NewServer(
+		api.Config{
+			ContainerWaitTimeout: 100 * time.Second,
+		},
+		r,
+		d,
+	)
+	cobra.CheckErr(err)
 
-	var group errgroup.Group
+	apipb.RegisterZapuskatorAPIServer(grpcServer, srv)
 
 	group.Go(func() error {
 		log.Printf("grpc server listening at %v", addr)
 		return grpcServer.Serve(lis)
 	})
+}
 
+func initRestAPIServer(ctx context.Context, group *errgroup.Group, grpcAddr string) {
 	mux := runtime.NewServeMux(runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName: true, EmitDefaults: true}))
 	opts := []grpc.DialOption{
 		grpc.WithInsecure(),
@@ -60,7 +108,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	group.Go(func() error {
-		return apipb.RegisterZapuskatorAPIHandlerFromEndpoint(ctx, mux, addr, opts)
+		return apipb.RegisterZapuskatorAPIHandlerFromEndpoint(ctx, mux, grpcAddr, opts)
 	})
 
 	group.Go(func() error {
@@ -68,13 +116,4 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		log.Printf("http server listening at %v", addr)
 		return http.ListenAndServe(addr, mux)
 	})
-
-	// FIXME: graceful shutdown by os.signal()
-
-	return group.Wait()
-}
-
-func init() {
-	rootCmd.PersistentFlags().IntVar(&grpcPort, "grpc-port", 4334, "Port to be listened by Zapuskator gRPC service")
-	rootCmd.PersistentFlags().IntVar(&httpPort, "http-port", 4224, "Port to be listened by Zapuskator HTTP service")
 }
