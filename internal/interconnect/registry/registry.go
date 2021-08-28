@@ -10,15 +10,18 @@ import (
 var ErrContainerNotExists = errors.New("container does not exist")
 
 type ContainerRegistry struct {
-	containers idIndex
-	index seedIndex
+	available   idIndex
+	paramsIndex paramsIndex
+	stopping    idIndex
+
 	registryLock sync.RWMutex
 }
 
 func NewContainerRegistry() (*ContainerRegistry, error) {
 	return &ContainerRegistry{
-		containers: make(idIndex),
-		index: make(seedIndex),
+		available:   make(idIndex),
+		paramsIndex: make(paramsIndex),
+		stopping:    make(idIndex),
 	}, nil
 }
 
@@ -35,14 +38,10 @@ func NewContainerRegistry() (*ContainerRegistry, error) {
 //		return err
 //	}
 //
-//	r.containers.set(c)
-//	r.index.set(c)
+//	r.available.set(c)
+//	r.paramsIndex.set(c)
 //	return nil
 //}
-
-func (r *ContainerRegistry) updateIndex(c *ContainerInfo) {
-	r.index[c.Params.Seed][c.Params.Input] = c
-}
 
 // GetByID is thread-safe way to get existing container by its ID
 // The container is returned locked, so you should unlock it when you finish operate with it
@@ -55,14 +54,14 @@ func (r *ContainerRegistry) GetByID(id string) (*ContainerInfo, error) {
 		return nil, err
 	}
 
-	c.mutex.Lock()
+	c.UpdateLastUsed()
 	return c, nil
 }
 
 // getByID returns existing container by its ID
 // is NOT thread safe
 func (r *ContainerRegistry) getByID(id string) (*ContainerInfo, error) {
-	c, exists := r.containers[id]
+	c, exists := r.available[id]
 	if !exists {
 		return nil, ErrContainerNotExists
 	}
@@ -81,14 +80,14 @@ func (r *ContainerRegistry) GetByParams(params core.ContainerParams) (*Container
 		return nil, err
 	}
 
-	c.mutex.Lock()
+	c.UpdateLastUsed()
 	return c, nil
 }
 
 // getByParams returns existing container by its parameters
 // is NOT thread safe
 func (r *ContainerRegistry) getByParams(params core.ContainerParams) (*ContainerInfo, error) {
-	inIndex, exists := r.index[params.Seed]
+	inIndex, exists := r.paramsIndex[params.Seed]
 	if !exists {
 		return nil, ErrContainerNotExists
 	}
@@ -107,6 +106,7 @@ func (r *ContainerRegistry) ExistingOrNewByParams(params core.ContainerParams) (
 
 	c, err := r.getByParams(params)
 	if err == nil {
+		c.UpdateLastUsed()
 		return c, nil
 	}
 
@@ -119,8 +119,52 @@ func (r *ContainerRegistry) ExistingOrNewByParams(params core.ContainerParams) (
 			params,
 		),
 	}
-	r.index.set(c)
+	r.paramsIndex.set(c)
 
-	c.mutex.Lock()
+	return c, nil
+}
+
+func (r *ContainerRegistry) ToStopping(id string) error {
+	r.registryLock.Lock()
+	defer r.registryLock.Unlock()
+
+	c, err := r.getByID(id)
+	if err != nil {
+		return err
+	}
+
+	err = c.ToStopping()
+	if err != nil {
+		return err
+	}
+
+	r.available.del(id)
+	r.paramsIndex.del(c)
+
+	r.stopping.set(c)
+	return nil
+}
+
+func (r *ContainerRegistry) ToStopped(id string) (*ContainerInfo, error) {
+	r.registryLock.Lock()
+	defer r.registryLock.Unlock()
+
+	c, err := r.getByID(id)
+	if c == nil {
+		c = r.stopping[id]
+	}
+	if c == nil {
+		return nil, ErrContainerNotExists
+	}
+
+	err = c.ToStopped()
+	if err != nil {
+		return c, err
+	}
+
+	r.available.del(id)
+	r.paramsIndex.del(c)
+	r.stopping.del(id)
+
 	return c, nil
 }

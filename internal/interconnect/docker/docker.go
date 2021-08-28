@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"context"
 	"log"
+	"time"
 
 	"github.com/denkoren/mi-labs-test/internal/core"
 	"github.com/denkoren/mi-labs-test/internal/util"
@@ -14,7 +16,7 @@ func NewContainerManager() (*ContainerManager, error) {
 	return &ContainerManager{}, nil
 }
 
-func (*ContainerManager) StartContainer(params core.ContainerParams) (core.ContainerInfo, error) {
+func (*ContainerManager) StartContainer(ctx context.Context, params core.ContainerParams) (core.ContainerInfo, error) {
 	log.Printf("Starting container: seed: %s, input: %s", params.Seed, params.Input)
 	c := core.NewContainerInfo(
 		util.RandString(10),
@@ -22,6 +24,7 @@ func (*ContainerManager) StartContainer(params core.ContainerParams) (core.Conta
 		params,
 	)
 	c.Status = core.ContainerStatusStarting
+	c.Scheduled = time.Now()
 
 	return c, nil
 }

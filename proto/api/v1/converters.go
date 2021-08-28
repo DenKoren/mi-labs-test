@@ -2,7 +2,6 @@ package v1
 
 import "github.com/denkoren/mi-labs-test/internal/core"
 
-
 func ConvertContainerStatus(status Container_Status) (core.ContainerStatus, error) {
 	switch status {
 	case Container_NEW:
@@ -11,10 +10,12 @@ func ConvertContainerStatus(status Container_Status) (core.ContainerStatus, erro
 		return core.ContainerStatusStarting, nil
 	case Container_READY:
 		return core.ContainerStatusReady, nil
-	case Container_RUNNING:
-		return core.ContainerStatusRunning, nil
 	case Container_STOPPING:
 		return core.ContainerStatusStopping, nil
+	case Container_STOPPED:
+		return core.ContainerStatusStopped, nil
+	case Container_FAILED:
+		return core.ContainerStatusFailed, nil
 	default:
 		return core.ContainerStatus(status), core.ErrUnknownContainerStatus
 	}

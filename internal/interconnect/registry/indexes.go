@@ -6,9 +6,27 @@ func (s idIndex) set(c *ContainerInfo) {
 	s[c.ID] = c
 }
 
-type inputIndex map[string]*ContainerInfo
-type seedIndex map[string]inputIndex
+func (s idIndex) del(id string) {
+	delete(s, id)
+}
 
-func (s seedIndex) set(c *ContainerInfo) {
+type inputIndex map[string]*ContainerInfo
+type paramsIndex map[string]inputIndex
+
+func (s paramsIndex) set(c *ContainerInfo) {
 	s[c.Params.Seed][c.Params.Input] = c
+}
+
+func (s paramsIndex) del(c *ContainerInfo) {
+	index, exists := s[c.Params.Seed]
+	if !exists {
+		return
+	}
+
+	delete(index, c.Params.Input)
+	if len(index) != 0 {
+		return
+	}
+
+	delete(s, c.Params.Seed)
 }

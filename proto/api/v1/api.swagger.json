@@ -113,8 +113,9 @@
         "NEW",
         "STARTING",
         "READY",
-        "RUNNING",
-        "STOPPING"
+        "STOPPING",
+        "STOPPED",
+        "FAILED"
       ],
       "default": "NEW"
     },

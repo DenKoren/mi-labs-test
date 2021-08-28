@@ -34,8 +34,9 @@ message Container {
     NEW = 0;
     STARTING = 1;
     READY = 2;
-    RUNNING = 3;
-    STOPPING = 4;
+    STOPPING = 3;
+    STOPPED = 4;
+    FAILED = 5;
   }
 
   message Params {
