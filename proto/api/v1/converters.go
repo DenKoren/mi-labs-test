@@ -24,7 +24,6 @@ func ConvertContainerStatus(status Container_Status) (core.ContainerStatus, erro
 func ConvertContainerParams(params *Container_Params) core.ContainerParams {
 	return core.ContainerParams{
 		Seed:  params.GetSeed(),
-		Input: params.GetInput(),
 	}
 }
 

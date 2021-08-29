@@ -113,6 +113,8 @@
         "NEW",
         "STARTING",
         "READY",
+        "NOT_READY",
+        "UNREACHABLE",
         "STOPPING",
         "STOPPED",
         "FAILED"

@@ -10,15 +10,18 @@ func _() {
 	var x [1]struct{}
 	_ = x[ContainerStatusNew-0]
 	_ = x[ContainerStatusStarting-1]
-	_ = x[ContainerStatusReady-2]
-	_ = x[ContainerStatusStopping-3]
-	_ = x[ContainerStatusStopped-4]
-	_ = x[ContainerStatusFailed-5]
+	_ = x[ContainerStatusRunning-2]
+	_ = x[ContainerStatusReady-3]
+	_ = x[ContainerStatusNotReady-4]
+	_ = x[ContainerStatusUnreachable-5]
+	_ = x[ContainerStatusStopping-6]
+	_ = x[ContainerStatusStopped-7]
+	_ = x[ContainerStatusFailed-8]
 }
 
-const _ContainerStatus_name = "NewStartingReadyStoppingStoppedFailed"
+const _ContainerStatus_name = "NewStartingRunningReadyNotReadyUnreachableStoppingStoppedFailed"
 
-var _ContainerStatus_index = [...]uint8{0, 3, 11, 16, 24, 31, 37}
+var _ContainerStatus_index = [...]uint8{0, 3, 11, 18, 23, 31, 42, 50, 57, 63}
 
 func (i ContainerStatus) String() string {
 	if i < 0 || i >= ContainerStatus(len(_ContainerStatus_index)-1) {

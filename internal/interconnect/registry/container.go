@@ -28,12 +28,20 @@ func (c *ContainerInfo) Save() error {
 
 var ErrTransitionNotAllowed = fmt.Errorf("transition not allowed")
 
-type TransitionHook func(newStatus core.ContainerStatus) error
+type TransitionHook func(c *ContainerInfo, newStatus core.ContainerStatus) error
 
 var allowedTransitions = map[core.ContainerStatus][]core.ContainerStatus{
 	core.ContainerStatusNew:      {core.ContainerStatusStarting, core.ContainerStatusFailed},
 	core.ContainerStatusStarting: {core.ContainerStatusReady, core.ContainerStatusFailed},
 	core.ContainerStatusReady:    {core.ContainerStatusStopping, core.ContainerStatusFailed},
+	core.ContainerStatusNotReady: {core.ContainerStatusStopping, core.ContainerStatusFailed},
+	core.ContainerStatusUnreachable: {
+		core.ContainerStatusReady,
+		core.ContainerStatusNotReady,
+		core.ContainerStatusStopping,
+		core.ContainerStatusStopped,
+		core.ContainerStatusFailed,
+	},
 	core.ContainerStatusStopping: {core.ContainerStatusStopped},
 	core.ContainerStatusStopped:  {},
 	core.ContainerStatusFailed:   {},
@@ -46,7 +54,7 @@ func (c *ContainerInfo) transition(status core.ContainerStatus, hooks ...Transit
 	for _, allowedTarget := range allowedTransitions[c.Status] {
 		if allowedTarget == status {
 			for _, hook := range hooks {
-				err := hook(status)
+				err := hook(c, status)
 				if err != nil {
 					return fmt.Errorf("transition from '%s' to '%s' failed: %w", c.Status.String(), status.String(), err)
 				}
@@ -63,7 +71,7 @@ func (c *ContainerInfo) transition(status core.ContainerStatus, hooks ...Transit
 func (c *ContainerInfo) ToStarting(hooks ...TransitionHook) error {
 	hooks = append(
 		hooks,
-		simpleHook(func(_ core.ContainerStatus) { c.Scheduled = time.Now() }),
+		simpleHook(func() { c.Scheduled = time.Now() }),
 	)
 
 	return c.transition(core.ContainerStatusStarting, hooks...)
@@ -72,7 +80,11 @@ func (c *ContainerInfo) ToStarting(hooks ...TransitionHook) error {
 func (c *ContainerInfo) ToReady(hooks ...TransitionHook) error {
 	hooks = append(
 		hooks,
-		simpleHook(func(_ core.ContainerStatus) { c.Started = time.Now() }),
+		simpleHook(func() {
+			if c.Status == core.ContainerStatusStarting {
+				c.Started = time.Now()
+			}
+		}),
 	)
 	return c.transition(core.ContainerStatusReady, hooks...)
 }
@@ -80,7 +92,7 @@ func (c *ContainerInfo) ToReady(hooks ...TransitionHook) error {
 func (c *ContainerInfo) ToStopping(hooks ...TransitionHook) error {
 	hooks = append(
 		hooks,
-		simpleHook(func(_ core.ContainerStatus) { c.Stopped = time.Now() }),
+		simpleHook(func() { c.Stopped = time.Now() }),
 	)
 	return c.transition(core.ContainerStatusStopping, hooks...)
 }
@@ -93,9 +105,10 @@ func (c *ContainerInfo) ToFailed(hooks ...TransitionHook) error {
 	return c.transition(core.ContainerStatusFailed, hooks...)
 }
 
-func simpleHook(f func(ns core.ContainerStatus)) TransitionHook {
-	return func(n core.ContainerStatus) error {
-		f(n)
+// Hook that does not return error
+func simpleHook(f func()) TransitionHook {
+	return func(_ *ContainerInfo, _ core.ContainerStatus) error {
+		f()
 		return nil
 	}
 }

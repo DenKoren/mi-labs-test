@@ -34,6 +34,8 @@ message Container {
     NEW = 0;
     STARTING = 1;
     READY = 2;
+    NOT_READY = 7;
+    UNREACHABLE = 6;
     STOPPING = 3;
     STOPPED = 4;
     FAILED = 5;

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/denkoren/mi-labs-test/internal/core"
 )
@@ -13,9 +14,9 @@ const defaultContainerRegistryCapacity = 10
 var ErrContainerNotExists = errors.New("container does not exist")
 
 type ContainerRegistry struct {
-	available   idIndex
-	paramsIndex paramsIndex
-	stopping    idIndex
+	available idIndex
+	seedIndex seedIndex
+	stopping  idIndex
 	failed      idIndex
 
 	registryLock sync.RWMutex
@@ -23,10 +24,10 @@ type ContainerRegistry struct {
 
 func NewContainerRegistry() (*ContainerRegistry, error) {
 	return &ContainerRegistry{
-		available:   make(idIndex, defaultContainerRegistryCapacity),
-		paramsIndex: make(paramsIndex, defaultContainerRegistryCapacity),
-		stopping:    make(idIndex, defaultContainerRegistryCapacity),
-		failed:      make(idIndex, defaultContainerRegistryCapacity),
+		available: make(idIndex, defaultContainerRegistryCapacity),
+		seedIndex: make(seedIndex, defaultContainerRegistryCapacity),
+		stopping:  make(idIndex, defaultContainerRegistryCapacity),
+		failed:    make(idIndex, defaultContainerRegistryCapacity),
 	}, nil
 }
 
@@ -39,7 +40,7 @@ func (r *ContainerRegistry) Register(c *ContainerInfo) error {
 	}
 
 	r.available.set(c)
-	r.paramsIndex.set(c)
+	r.seedIndex.set(c)
 	return nil
 }
 
@@ -87,12 +88,7 @@ func (r *ContainerRegistry) GetByParams(params core.ContainerParams) (*Container
 // getByParams returns existing container by its parameters
 // is NOT thread safe
 func (r *ContainerRegistry) getByParams(params core.ContainerParams) (*ContainerInfo, error) {
-	inIndex, exists := r.paramsIndex[params.Seed]
-	if !exists {
-		return nil, ErrContainerNotExists
-	}
-
-	c, exists := inIndex[params.Input]
+	c, exists := r.seedIndex[params.Seed]
 	if !exists {
 		return nil, ErrContainerNotExists
 	}
@@ -123,12 +119,12 @@ func (r *ContainerRegistry) ExistingOrNewByParams(params core.ContainerParams) (
 			params,
 		),
 	}
-	r.paramsIndex.set(c)
+	r.seedIndex.set(c)
 
 	return c, nil
 }
 
-func (r *ContainerRegistry) ToStopping(id string) error {
+func (r *ContainerRegistry) ToStopping(id string, hooks ...TransitionHook) error {
 	r.registryLock.Lock()
 	defer r.registryLock.Unlock()
 
@@ -137,19 +133,21 @@ func (r *ContainerRegistry) ToStopping(id string) error {
 		return err
 	}
 
-	err = c.ToStopping(
-		func(_ core.ContainerStatus) error {
+	hooks = append(
+		hooks,
+		simpleHook(func() {
 			r.available.del(id)
-			r.paramsIndex.del(c)
+			r.seedIndex.del(c)
 
 			r.stopping.set(c)
-			return nil
-		},
+		}),
 	)
+
+	err = c.ToStopping(hooks...)
 	return err
 }
 
-func (r *ContainerRegistry) ToStopped(id string) (*ContainerInfo, error) {
+func (r *ContainerRegistry) ToStopped(id string, hooks ...TransitionHook) (*ContainerInfo, error) {
 	r.registryLock.Lock()
 	defer r.registryLock.Unlock()
 
@@ -161,12 +159,39 @@ func (r *ContainerRegistry) ToStopped(id string) (*ContainerInfo, error) {
 		return nil, ErrContainerNotExists
 	}
 
-	return c, c.ToStopped(
-		func(_ core.ContainerStatus) error {
+	hooks = append(
+		hooks,
+		simpleHook(func() {
 			r.available.del(id)
-			r.paramsIndex.del(c)
+			r.seedIndex.del(c)
 			r.stopping.del(id)
-			return nil
-		},
+		}),
 	)
+	return c, c.ToStopped(hooks...)
+}
+
+func (r *ContainerRegistry) OldContainers(lastUsedBefore time.Time) ([]*ContainerInfo, error) {
+	r.registryLock.RLock()
+	defer r.registryLock.RUnlock()
+
+	result := make([]*ContainerInfo, 0, defaultContainerRegistryCapacity)
+	for _, container := range r.available {
+		if container.LastUsed.Before(lastUsedBefore) {
+			result = append(result, container)
+		}
+	}
+
+	return result, nil
+}
+
+func (r *ContainerRegistry) StoppingContainers() ([]*ContainerInfo, error) {
+	r.registryLock.RLock()
+	defer r.registryLock.RUnlock()
+
+	result := make([]*ContainerInfo, 0, len(r.stopping))
+	for _, container := range r.stopping {
+		result = append(result, container)
+	}
+
+	return result, nil
 }
