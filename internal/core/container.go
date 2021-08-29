@@ -44,6 +44,7 @@ type ContainerStatus int
 
 const (
 	ContainerStatusNew         ContainerStatus = iota // Was just added to in-memory registry.
+	ContainerStatusStarting                           // Was scheduled for start in management system.
 	ContainerStatusRunning                            // Was scheduled for start in management system.
 	ContainerStatusReady                              // Was started, is healthy and ready to handle requests.
 	ContainerStatusNotReady                           // Was started, but health-check indicates container is not ready.

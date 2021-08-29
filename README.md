@@ -29,3 +29,49 @@ Docker контейнер небольшого веб-сервиса. Работ
 - Если пользователь отвалился, и больше никому не надо считать результат с такими настройками, надо запрос к сервису тоже отменить (сервис правильно отработает завершение соединения и прекратит начатый счет)
 
 Сервис должен работать на одной тачке соизмеримой по мощи с ноутбуком и выдерживать десятки запросов в минуту.
+
+
+## Как дебагать:
+Собрать образ-заглушку сервиса, который запускатор будет поднимть по запросу:
+```bash
+cd '<git repo root>/dev/compute'
+env GOOS=linux go build .
+docker build . --tag 'mi-labs-test:latest'
+```
+
+Собрать образ с самим сервисом
+```bash
+cd '<git repo root>'
+docker build . --tag 'mi-labs-debug:latest' 
+```
+
+Запустить и подключиться через dlv на порт 2345
+```bash
+docker run \
+  --publish '4334:4334' \
+  --publish '4224:4224' \
+  --publish '2345:2345' \
+  --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+  mi-labs-debug:latest
+```
+
+## Как использовать
+Собрать релизный образ
+```bash
+cd '<git repo root>'
+docker build --file ./Dockerfile.release . --tag mi-labs-release:latest
+```
+
+Запустить:
+```bash
+docker run \
+  --publish '127.0.0.1:4334:4334/tcp' \
+  --publish '127.0.0.1:4224:4224/tcp' \
+  --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+  mi-labs-release:latest
+```
+
+Сходить в REST API или gRPC API, дождаться старта контейнера и ответа от него:
+```bash
+curl 'http://127.0.0.1:4224/v1/calculate/myseed/my-awesome-input-line'
+```
