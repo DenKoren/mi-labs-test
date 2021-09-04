@@ -47,6 +47,11 @@ func (s *Server) Calculate(ctx context.Context, request *apipb.Calculate_Request
 
 	go s.refreshContainerLastUsed(ctx, container)
 
+	err = s.createContainer(ctx, container)
+	if err != nil {
+		return nil, err
+	}
+
 	err = s.startContainer(ctx, container)
 	if err != nil {
 		return nil, err
@@ -82,26 +87,66 @@ func (s *Server) Calculate(ctx context.Context, request *apipb.Calculate_Request
 	return &apipb.Calculate_Response{Data: data}, err
 }
 
-func (s *Server) startContainer(ctx context.Context, container *registry.ContainerInfo) error {
-	if container.Status != core.ContainerStatusNew {
-		// Container does not need starting
-		return nil
+func (s *Server) createContainer(ctx context.Context, container *registry.ContainerInfo) error {
+	log.Printf("[API] creating container for seed '%s'", container.Params.Seed)
+
+	err := container.ToCreated(
+		func(c *registry.ContainerInfo, _ core.ContainerStatus) error {
+			if c.Status != core.ContainerStatusNew {
+				// Container was already created, nothing to do
+				return nil
+			}
+
+			id, err := s.docker.CreateContainer(ctx, container.Params)
+			if err != nil {
+				return err
+			}
+
+			container.ID = id
+			return nil
+		},
+		logTransition,
+	)
+
+	if errors.Is(err, registry.ErrTransitionNotAllowed) {
+		if container.Status.WasCreated() {
+			// Another thread already created container
+			return nil
+		}
 	}
+
+	_ = container.ToFailed(logTransition)
+	return err
+}
+
+func (s *Server) startContainer(ctx context.Context, container *registry.ContainerInfo) error {
+	log.Printf("[API] starting container '%s'", container.ID)
 
 	err := container.ToStarting(
 		func(c *registry.ContainerInfo, _ core.ContainerStatus) error {
-			return s.startContainerHook(ctx, c)
+			if container.Status.IsActive() {
+				// container already was started
+				return nil
+			}
+
+			if !container.Status.IsStartable() {
+				// We can't start this container
+				return fmt.Errorf("can't start container in status %s", container.Status)
+			}
+
+			addr, err := s.docker.StartContainer(ctx, container.ID)
+			if err != nil {
+				return err
+			}
+			container.Addr = addr
+			return nil
 		},
+		logTransition,
 	)
 
-	if err == nil {
-		// We successfully scheduled the container
-		return nil
-	}
-
 	if errors.Is(err, registry.ErrTransitionNotAllowed) {
-		if container.Status == core.ContainerStatusStarting {
-			// Someone already took container and scheduled it.
+		if container.Status.IsActive() {
+			// Another thread already started container
 			return nil
 		}
 	}
@@ -109,95 +154,47 @@ func (s *Server) startContainer(ctx context.Context, container *registry.Contain
 	return err
 }
 
-func (s *Server) startContainerHook(ctx context.Context, container *registry.ContainerInfo) error {
-	log.Printf("Container status is '%s', starting new docker container", container.Status.String())
-	cc, err := s.docker.StartContainer(ctx, container.ContainerInfo.Params)
-	if err != nil {
-		return fmt.Errorf("failed to start new container: %w", err)
-	}
-
-	container.ID = cc.ID
-	container.Addr = cc.Addr
-
-	err = s.registry.Register(container)
-	if err != nil {
-		return fmt.Errorf("failed to register new container '%s': %w", container.ID, err)
-	}
-
-	log.Printf("Container '%s' was scheduled", container.ID)
-	return nil
-}
-
 func (s *Server) waitForContainer(ctx context.Context, container *registry.ContainerInfo) error {
+	subscription := container.Subscribe()
+	defer subscription.Unsubscribe()
+
+	log.Printf("[API] waiting for container '%s' start", container.ID)
+
 	if container.Status == core.ContainerStatusReady {
 		// Container ready for work
+		// We need to check this before reading the channel to make sure we did not miss the
+		// event while subscribing
 		return nil
 	}
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 
 	waitCtx, cancel := context.WithTimeout(ctx, s.config.ContainerWaitTimeout)
 	defer cancel()
 
 	for {
 		select {
-		case <-ticker.C:
-			err := s.refreshContainerStatus(waitCtx, container)
+		case <-subscription.C:
 			if container.Status == core.ContainerStatusReady {
-				log.Printf("container '%s' is ready", container.ID)
+				// Container ready for work
 				return nil
 			}
-
-			if err != nil {
-				return fmt.Errorf("failed to wait for container '%s' start: %w", container.ID, err)
-			}
-			if !container.Status.IsAvailable() {
-				return fmt.Errorf("something went wrong with container '%s' and it moved to '%s' status", container.ID, container.Status.String())
-			}
-
 		case <-waitCtx.Done():
 			return fmt.Errorf("failed to wait for container '%s' start: %w", container.ID, waitCtx.Err())
 		}
 	}
 }
 
-func (s *Server) refreshContainerStatus(ctx context.Context, container *registry.ContainerInfo) error {
-	isRunning, err := s.docker.IsContainerRunning(ctx, container.ID)
-	if err != nil {
-		log.Printf("can't check docker container '%s' status: %v", container.ID, err)
-		return err
+func (s *Server) ignoreErr(err error, ignored ...error) error {
+	for _, toIgnore := range ignored {
+		if errors.Is(err, toIgnore) {
+			return nil
+		}
 	}
 
-	if !isRunning {
-		log.Printf("container '%s' is not running yet", container.ID)
-		return nil
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		fmt.Sprintf("http://%s:8080/health", container.Addr),
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("container '%s' is not ready yet", container.ID)
-		return nil
-	}
-
-	return container.ToReady()
+	return err
 }
 
 func (s *Server) refreshContainerLastUsed(ctx context.Context, container *registry.ContainerInfo) {
+	// FIXME: use 1/2 of container idle timeout here
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -209,4 +206,9 @@ func (s *Server) refreshContainerLastUsed(ctx context.Context, container *regist
 			container.UpdateLastUsed()
 		}
 	}
+}
+
+func logTransition(c *registry.ContainerInfo, newStatus core.ContainerStatus) error {
+	log.Printf("[API] container '%s' transitioned from '%s' to '%s'", c.ID, c.Status.String(), newStatus.String())
+	return nil
 }

@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	bootLag = 5 * time.Second
 	healthyLag = 120 * time.Second
 	listenPort = 8080
 )
@@ -24,6 +25,9 @@ func main() {
 
 	mux.HandleFunc("/health", handleHealthcheck)
 	mux.HandleFunc("/calculate/", handleCalculate)
+
+	// Imitate long container bootup: don't listen port for several seconds.
+	time.Sleep(bootLag)
 
 	addr := fmt.Sprintf(":%d", listenPort)
 	lis, err := net.Listen("tcp", addr)

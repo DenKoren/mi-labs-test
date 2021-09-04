@@ -5,11 +5,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/denkoren/mi-labs-test/internal/core"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	dclient "github.com/docker/docker/client"
-
-	"github.com/denkoren/mi-labs-test/internal/core"
 )
 
 type ManagerConfig struct {
@@ -22,6 +21,19 @@ type Manager struct {
 	config ManagerConfig
 	docker *dclient.Client
 }
+
+type ContainerState string
+
+const (
+	ContainerStateUnknown    ContainerState = "unknown"
+	ContainerStateCreated    ContainerState = "created"
+	ContainerStateRunning    ContainerState = "running"
+	ContainerStatePaused     ContainerState = "paused"
+	ContainerStateRestarting ContainerState = "restarting"
+	ContainerStateRemoving   ContainerState = "removing"
+	ContainerStateExited     ContainerState = "exited"
+	ContainerStateDead       ContainerState = "dead"
+)
 
 func NewManager(config ManagerConfig) (*Manager, error) {
 	docker, err := dclient.NewClientWithOpts(
@@ -40,61 +52,48 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 	}, nil
 }
 
-func (m *Manager) StartContainer(ctx context.Context, params core.ContainerParams) (core.ContainerInfo, error) {
-	log.Printf("Starting container for seed: %s", params.Seed)
+func (m *Manager) CreateContainer(ctx context.Context, params core.ContainerParams) (string, error) {
+	log.Printf("[Docker] creating container for seed: %s", params.Seed)
 
 	createResult, err := m.docker.ContainerCreate(ctx, &container.Config{
 		Image: m.config.ImageTag,
 		Tty:   false,
 	}, nil, nil, nil, "")
 
-	containerID := createResult.ID
-
 	if err != nil {
-		return core.ContainerInfo{}, err
+		return "", err
 	}
 
-	err = m.docker.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
-	if err != nil {
-		return core.ContainerInfo{}, err
-	}
-
-	dContainerInfo, err := m.docker.ContainerInspect(ctx, containerID)
-	if err != nil {
-		return core.ContainerInfo{}, err
-	}
-
-	c := core.NewContainerInfo(
-		containerID,
-		dContainerInfo.NetworkSettings.IPAddress,
-		params,
-	)
-	c.Status = core.ContainerStatusStarting
-	c.Scheduled = time.Now()
-
-	return c, nil
+	log.Printf("[Docker] container with ID '%s' created for seed %s", createResult.ID, params.Seed)
+	return createResult.ID, nil
 }
 
-func (m *Manager) IsContainerRunning(ctx context.Context, id string) (bool, error) {
-	info, err := m.docker.ContainerInspect(ctx, id)
+func (m *Manager) StartContainer(ctx context.Context, id string) (string, error) {
+	log.Printf("[Docker] starting container '%s'", id)
+
+	err := m.docker.ContainerStart(ctx, id, types.ContainerStartOptions{})
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
-	return info.State.Running, nil
+	dInfo, err := m.docker.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", err
+	}
+
+	return dInfo.NetworkSettings.IPAddress, nil
 }
 
-func (m *Manager) IsContainerStopped(ctx context.Context, id string) (bool, error) {
+func (m *Manager) ContainerState(ctx context.Context, id string) (ContainerState, error) {
 	info, err := m.docker.ContainerInspect(ctx, id)
 	if err != nil {
-		return false, err
+		return ContainerStateUnknown, err
 	}
 
-	// FIXME: not sure about correct way to detect stopped container
-	return info.State.Status == "exited", nil
+	return ContainerState(info.State.Status), nil
 }
 
 func (m *Manager) StopContainer(ctx context.Context, id string) error {
-	log.Printf("Stopping container: id: %s", id)
+	log.Printf("[Docker] stopping container '%s'", id)
 	return m.docker.ContainerStop(ctx, id, &m.config.RequestTimeout)
 }

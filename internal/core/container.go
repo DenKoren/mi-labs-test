@@ -37,23 +37,39 @@ func NewContainerInfo(id string, addr string, params ContainerParams) ContainerI
 }
 
 type ContainerParams struct {
-	Seed  string
+	Seed string
 }
 
 type ContainerStatus int
 
 const (
-	ContainerStatusNew         ContainerStatus = iota // Was just added to in-memory registry.
-	ContainerStatusStarting                           // Was scheduled for start in management system.
-	ContainerStatusRunning                            // Was scheduled for start in management system.
-	ContainerStatusReady                              // Was started, is healthy and ready to handle requests.
-	ContainerStatusNotReady                           // Was started, but health-check indicates container is not ready.
-	ContainerStatusUnreachable                        // Was started, but is unreachable by network.
-	ContainerStatusStopping                           // Is stopping. It can't handle requests but still exist in in-memory registry.
-	ContainerStatusStopped                            // Was stopped and already removed from in-memory registry.
-	ContainerStatusFailed                             // Failed to start or does not respond to requests.
+	ContainerStatusNew     ContainerStatus = iota // Was just added to in-memory registry.
+	ContainerStatusCreated                        // Was created in Docker service
+
+	// Active statuses
+	ContainerStatusStarting    // Was scheduled for start in management system.
+	ContainerStatusRunning     // Was started, but health-check indicates container is not ready.
+	ContainerStatusReady       // Was started, is healthy and ready to handle requests.
+	ContainerStatusUnreachable // Was started, but is unreachable by network.
+
+	// Inactive statuses
+	ContainerStatusPaused  // Was paused.
+	ContainerStatusStopped // Was stopped and already removed from in-memory registry.
+	ContainerStatusFailed  // Container failed to start due to system error (e.g. docker error).
 )
 
-func (s ContainerStatus) IsAvailable() bool {
-	return s < ContainerStatusStopping
+func (i ContainerStatus) WasCreated() bool {
+	return i >= ContainerStatusCreated
+}
+
+// IsActive becomes true when docker container is running
+func (i ContainerStatus) IsActive() bool {
+	return ContainerStatusStarting <= i && i <= ContainerStatusUnreachable
+}
+
+// IsStartable becomes true when docker container is not running, but we can start it
+func (i ContainerStatus) IsStartable() bool {
+	return i == ContainerStatusStopped ||
+		i == ContainerStatusPaused ||
+		i == ContainerStatusCreated
 }
