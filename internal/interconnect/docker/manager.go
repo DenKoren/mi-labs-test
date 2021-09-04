@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -55,9 +56,12 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 func (m *Manager) CreateContainer(ctx context.Context, params core.ContainerParams) (string, error) {
 	log.Printf("[Docker] creating container for seed: %s", params.Seed)
 
+	seedEnv := fmt.Sprintf("SEED=%s", params.Seed)
+
 	createResult, err := m.docker.ContainerCreate(ctx, &container.Config{
 		Image: m.config.ImageTag,
 		Tty:   false,
+		Env: []string{seedEnv},
 	}, nil, nil, nil, "")
 
 	if err != nil {
