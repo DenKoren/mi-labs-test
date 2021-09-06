@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	bootLag = 5 * time.Second
-	healthyLag = 120 * time.Second
-	listenPort = 8080
+	bootLag     = 5 * time.Second
+	healthyLag  = 15 * time.Second
+	responseLag = 15 * time.Second
+	listenPort  = 8080
 )
 
 var (
@@ -55,6 +56,8 @@ func handleCalculate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	time.Sleep(responseLag)
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(r.RequestURI))

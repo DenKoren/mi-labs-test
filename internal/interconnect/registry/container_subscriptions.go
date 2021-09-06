@@ -13,7 +13,7 @@ const defaultStatusSubscriptionCapacity = 2
 type Subscription struct {
 	C <-chan core.ContainerStatus
 
-	id int
+	id        int
 	container *ContainerInfo
 }
 
@@ -43,7 +43,8 @@ func (s Subscription) Unsubscribe() {
 	go func() {
 		// Read rest of events from subscription to prevent memory leaks.
 		// Nobody should already listen this channel anyway
-		for range s.C {}
+		for range s.C {
+		}
 	}()
 }
 
@@ -61,11 +62,12 @@ func (c *ContainerInfo) subscribe() Subscription {
 	sub := Subscription{
 		C: subCh,
 
-		id: len(c.subscribers),
+		id:        c.nextSubscriberID,
 		container: c,
 	}
 
 	c.subscribers[sub.id] = subCh
+	c.nextSubscriberID++
 
 	log.Printf("[Registry] new container status change events subscription. Container: '%s', Subscription: '%d'. Subscriptions count: '%d'",
 		c.ID,
@@ -77,16 +79,13 @@ func (c *ContainerInfo) subscribe() Subscription {
 }
 
 func (c *ContainerInfo) notifySubscribers(status core.ContainerStatus) {
-	notifyTimeout := time.NewTimer(defaultNotificationTimeout)
-	defer notifyTimeout.Stop()
-
+	log.Printf("[Registry] notifying '%d' container subscribers about status change...", len(c.subscribers))
 	for _, subCh := range c.subscribers {
-		notifyTimeout.Reset(defaultNotificationTimeout)
-
 		select {
 		case subCh <- status:
-		case <-notifyTimeout.C:
+		default:
 			// Don't block on notifications. It is better to lose one, than to catch deadlock
+			log.Printf("[Registry] status change notification skipped!")
 		}
 	}
 }

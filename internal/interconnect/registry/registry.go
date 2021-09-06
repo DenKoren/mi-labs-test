@@ -17,7 +17,7 @@ type ContainerRegistry struct {
 	idIndex   idIndex
 	seedIndex seedIndex
 	stopping  idIndex
-	failed      idIndex
+	failed    idIndex
 
 	indexesLock sync.RWMutex
 }
@@ -132,7 +132,7 @@ func (r *ContainerRegistry) ExistingOrNewByParams(params core.ContainerParams) (
 // That is why we subscribe the status change event and wait container started
 // to update internal ID index.
 func (r *ContainerRegistry) registerContainerID(c *ContainerInfo) {
-	subscription := c.subscribe()
+	subscription := c.Subscribe()
 	defer subscription.Unsubscribe()
 
 	if c.Status.WasCreated() {

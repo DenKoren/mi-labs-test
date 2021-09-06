@@ -17,7 +17,7 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 # Build project
 COPY . /mi-labs-test
 WORKDIR /mi-labs-test/cmd/zapuskator
-RUN go build -gcflags="all=-N -l" -o /server
+RUN go build -o /server
 
 # Run container
 FROM alpine

@@ -10,16 +10,18 @@ import (
 
 type ContainerInfo struct {
 	sync.Mutex
-	registry *ContainerRegistry
-	subscribers map[int]subscriber
+	registry         *ContainerRegistry
+	subscribers      map[int]subscriber
+	nextSubscriberID int
 
 	core.ContainerInfo
 }
 
 func NewContainerInfo(r *ContainerRegistry, coreInfo core.ContainerInfo) *ContainerInfo {
 	return &ContainerInfo{
-		registry: r,
-		subscribers: make(map[int]subscriber, defaultStatusSubscriptionCapacity),
+		registry:         r,
+		subscribers:      make(map[int]subscriber, defaultStatusSubscriptionCapacity),
+		nextSubscriberID: 0,
 
 		ContainerInfo: coreInfo,
 	}
@@ -85,8 +87,8 @@ var allowedTransitions = map[core.ContainerStatus][]core.ContainerStatus{
 		core.ContainerStatusStopped,
 	},
 
-	core.ContainerStatusStopped:  {core.ContainerStatusStarting},
-	core.ContainerStatusFailed:   {},
+	core.ContainerStatusStopped: {core.ContainerStatusStarting},
+	core.ContainerStatusFailed:  {},
 }
 
 func (c *ContainerInfo) runHooks(newStatus core.ContainerStatus, hooks ...TransitionHook) error {

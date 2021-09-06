@@ -24,22 +24,24 @@ type Server struct {
 
 	config Config
 
-	registry *registry.ContainerRegistry
-	docker   *docker.Manager
+	registry  *registry.ContainerRegistry
+	docker    *docker.Manager
+	requester *responseMux
 }
 
 func NewServer(config Config, reg *registry.ContainerRegistry, dock *docker.Manager) (*Server, error) {
 	return &Server{
 		config: config,
 
-		registry: reg,
-		docker:   dock,
+		registry:  reg,
+		docker:    dock,
+		requester: newResponseMux(),
 	}, nil
 }
 
 func (s *Server) Calculate(ctx context.Context, request *apipb.Calculate_Request) (*apipb.Calculate_Response, error) {
 	container, err := s.registry.ExistingOrNewByParams(core.ContainerParams{
-		Seed:  request.GetParams().Seed,
+		Seed: request.GetParams().Seed,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to register new container: %v", err)
@@ -62,26 +64,26 @@ func (s *Server) Calculate(ctx context.Context, request *apipb.Calculate_Request
 		return nil, err
 	}
 
-	proxyRequest, err := http.NewRequestWithContext(
+	url := fmt.Sprintf("http://%s:8080/calculate/%s", container.Addr, request.Params.Input)
+	log.Printf("[API] starting request to '%s'", url)
+	reader, errCh, err := s.requester.getRequest(
 		ctx,
 		http.MethodGet,
-		fmt.Sprintf("http://%s:8080/calculate/%s", container.Addr, request.Params.Input),
-		nil,
+		url,
 	)
+
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := http.DefaultClient.Do(proxyRequest)
+	log.Printf("[API] got reader and err chan for '%s'", url)
+	err = <-errCh
 	if err != nil {
 		return nil, err
 	}
 
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("container responded with code '%d: %s'", response.StatusCode, response.Status)
-	}
-
-	data, err := ioutil.ReadAll(response.Body)
+	log.Printf("[API] got response from '%s', reading data...", url)
+	data, err := ioutil.ReadAll(reader)
 
 	// FIXME: is the data huge? Prefer stream here.
 	return &apipb.Calculate_Response{Data: data}, err
